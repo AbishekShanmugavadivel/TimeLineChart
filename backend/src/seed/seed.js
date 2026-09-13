@@ -254,8 +254,8 @@ const seedDB = async () => {
     console.log('Seed: Connected to MongoDB...');
 
     // 1. Upsert Single Owner Account safely from env
-    const ownerEmail = process.env.OWNER_EMAIL || 'owner@genai.com';
-    const ownerPassword = process.env.OWNER_PASSWORD || 'OwnerSecurePassword2026!';
+    const ownerEmail = process.env.OWNER_EMAIL || 'abishekgasckcs@gmail.com';
+    const ownerPassword = process.env.OWNER_PASSWORD || 'abishek@2007';
 
     let owner = await User.findOne({ role: 'OWNER' });
     if (!owner) {

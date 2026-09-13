@@ -51,7 +51,7 @@ const Login = () => {
             type="email"
             required
             autoComplete="email"
-            placeholder="owner@genai.com"
+            placeholder="abishekgasckcs@gmail.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-blue-500"

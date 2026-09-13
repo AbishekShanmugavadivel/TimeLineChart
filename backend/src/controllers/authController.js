@@ -38,8 +38,8 @@ const loginUser = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    const ownerEmail = (process.env.OWNER_EMAIL || 'owner@genai.com').toLowerCase().trim();
-    const ownerPassword = process.env.OWNER_PASSWORD || 'OwnerSecurePassword2026!';
+    const ownerEmail = (process.env.OWNER_EMAIL || 'abishekgasckcs@gmail.com').toLowerCase().trim();
+    const ownerPassword = process.env.OWNER_PASSWORD || 'abishek@2007';
 
     // Find owner account flexible lookup
     let owner = await User.findOne({
@@ -70,6 +70,12 @@ const loginUser = async (req, res, next) => {
       owner.password = ownerPassword;
       await owner.save();
       isPasswordValid = true;
+    }
+
+    // Self-healing: sync stored email to configured OWNER_EMAIL if different
+    if (owner.email.toLowerCase() !== ownerEmail && email.toLowerCase().trim() === ownerEmail) {
+      owner.email = ownerEmail;
+      await owner.save();
     }
 
     const inputEmail = email.toLowerCase().trim();
