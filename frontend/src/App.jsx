@@ -73,7 +73,7 @@ function App() {
         }
       >
         <Route path="/" element={<Dashboard />} />
-        <Route path="/dashboard" element={<Navigate to="/" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/roadmap" element={<Roadmap />} />
         <Route path="/roadmap/:phaseId" element={<PhaseDetail />} />
         <Route path="/today" element={<Today />} />
