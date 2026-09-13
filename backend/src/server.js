@@ -177,8 +177,8 @@ app.get("/api/health", (req, res) => {
 // ============================================================
 
 app.use(
-  "/api/auth",
-  require("./routes/authRoutes")
+  "/api/access",
+  require("./routes/accessRoutes")
 );
 
 app.use(

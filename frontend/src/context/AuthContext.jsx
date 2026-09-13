@@ -1,101 +1,83 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { authService } from '../services/authService';
+import accessService from '../services/accessService';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('genai_user');
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
-  const [token, setToken] = useState(() => localStorage.getItem('genai_access_token') || null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Persistent Auth Initialization on Startup/Refresh
+  // Check access session status on app load
   useEffect(() => {
-    const initializeAuth = async () => {
-      const existingToken = localStorage.getItem('genai_access_token');
-
-      if (existingToken) {
-        try {
-          const meRes = await authService.getMe();
-          if (meRes.success) {
-            setUser(meRes.data);
-            localStorage.setItem('genai_user', JSON.stringify(meRes.data));
+    const checkAccess = async () => {
+      try {
+        const res = await accessService.getStatus();
+        if (res.success && res.authenticated) {
+          setIsAuthenticated(true);
+          try {
+            const profileRes = await accessService.getProfile();
+            if (profileRes.success) setUser(profileRes.data);
+          } catch (e) {
+            // Profile fetch optional
           }
-        } catch (err) {
-          // If getMe failed, interceptor tried refresh or session expired
-          clearSession();
+        } else {
+          setIsAuthenticated(false);
         }
-      } else {
-        // If no stored token, attempt to restore session via HttpOnly cookie
-        try {
-          const refreshRes = await authService.refreshToken();
-          if (refreshRes.success && refreshRes.accessToken) {
-            setToken(refreshRes.accessToken);
-            setUser(refreshRes.data);
-            localStorage.setItem('genai_access_token', refreshRes.accessToken);
-            localStorage.setItem('genai_user', JSON.stringify(refreshRes.data));
-          } else {
-            clearSession();
-          }
-        } catch (refreshErr) {
-          clearSession();
-        }
+      } catch (err) {
+        setIsAuthenticated(false);
+        localStorage.removeItem('genai_session_token');
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
-    initializeAuth();
+    checkAccess();
+
+    const handleSessionExpired = () => {
+      setIsAuthenticated(false);
+      setUser(null);
+    };
+
+    window.addEventListener('genai_session_expired', handleSessionExpired);
+    return () => window.removeEventListener('genai_session_expired', handleSessionExpired);
   }, []);
 
-  const login = async (credentials) => {
-    const response = await authService.login(credentials);
-    if (response.success && response.accessToken) {
-      setToken(response.accessToken);
-      setUser(response.data);
-      localStorage.setItem('genai_access_token', response.accessToken);
-      localStorage.setItem('genai_user', JSON.stringify(response.data));
-    }
-    return response;
-  };
-
-  const updateProfile = async (profileData) => {
-    const response = await authService.updateProfile(profileData);
-    if (response.success && response.data) {
-      setUser(response.data);
-      localStorage.setItem('genai_user', JSON.stringify(response.data));
+  const verifyAccess = async (code) => {
+    const response = await accessService.verifyAccess(code);
+    if (response.success) {
+      if (response.token) {
+        localStorage.setItem('genai_session_token', response.token);
+      }
+      setIsAuthenticated(true);
+      try {
+        const profileRes = await accessService.getProfile();
+        if (profileRes.success) setUser(profileRes.data);
+      } catch (e) {}
     }
     return response;
   };
 
   const logout = async () => {
     try {
-      await authService.logout();
+      await accessService.logout();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      clearSession();
+      setIsAuthenticated(false);
+      setUser(null);
+      localStorage.removeItem('genai_session_token');
     }
-  };
-
-  const clearSession = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('genai_access_token');
-    localStorage.removeItem('genai_user');
   };
 
   return (
     <AuthContext.Provider
       value={{
+        isAuthenticated,
         user,
-        token,
         loading,
-        isAuthenticated: !!user,
-        login,
-        updateProfile,
+        verifyAccess,
+        login: (credentials) => verifyAccess(credentials.code || credentials.password),
         logout
       }}
     >

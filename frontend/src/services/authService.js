@@ -1,24 +1,21 @@
-import api from './api';
+import accessService from './accessService';
 
 export const authService = {
   login: async (credentials) => {
-    const response = await api.post('/auth/login', credentials);
-    return response.data;
+    return accessService.verifyAccess(credentials.code || credentials.password);
   },
   refreshToken: async () => {
-    const response = await api.post('/auth/refresh');
-    return response.data;
+    return accessService.getStatus();
   },
   logout: async () => {
-    const response = await api.post('/auth/logout');
-    return response.data;
+    return accessService.logout();
   },
   getMe: async () => {
-    const response = await api.get('/auth/me');
-    return response.data;
+    return accessService.getProfile();
   },
   updateProfile: async (profileData) => {
-    const response = await api.put('/auth/profile', profileData);
-    return response.data;
+    return accessService.updateProfile(profileData);
   }
 };
+
+export default authService;
