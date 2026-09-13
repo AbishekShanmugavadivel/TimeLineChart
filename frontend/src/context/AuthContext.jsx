@@ -14,15 +14,21 @@ export const AuthProvider = ({ children }) => {
   // Persistent Auth Initialization on Startup/Refresh
   useEffect(() => {
     const initializeAuth = async () => {
-      try {
-        // Attempt to fetch current owner profile
-        const meRes = await authService.getMe();
-        if (meRes.success) {
-          setUser(meRes.data);
-          localStorage.setItem('genai_user', JSON.stringify(meRes.data));
+      const existingToken = localStorage.getItem('genai_access_token');
+
+      if (existingToken) {
+        try {
+          const meRes = await authService.getMe();
+          if (meRes.success) {
+            setUser(meRes.data);
+            localStorage.setItem('genai_user', JSON.stringify(meRes.data));
+          }
+        } catch (err) {
+          // If getMe failed, interceptor tried refresh or session expired
+          clearSession();
         }
-      } catch (err) {
-        // If getMe failed, attempt session refresh via HttpOnly cookie
+      } else {
+        // If no stored token, attempt to restore session via HttpOnly cookie
         try {
           const refreshRes = await authService.refreshToken();
           if (refreshRes.success && refreshRes.accessToken) {
@@ -36,9 +42,9 @@ export const AuthProvider = ({ children }) => {
         } catch (refreshErr) {
           clearSession();
         }
-      } finally {
-        setLoading(false);
       }
+
+      setLoading(false);
     };
 
     initializeAuth();

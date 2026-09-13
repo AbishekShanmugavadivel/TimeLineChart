@@ -2,25 +2,28 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+const JWT_ACCESS_SECRET = process.env.JWT_SECRET || 'genai_roadmap_access_secret_2026_key';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'genai_roadmap_refresh_secret_2026_key';
+
 const generateAccessToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'genai_roadmap_access_secret_2026_key', {
+  return jwt.sign({ id }, JWT_ACCESS_SECRET, {
     expiresIn: '15m'
   });
 };
 
 const generateRefreshToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET || 'genai_roadmap_refresh_secret_2026_key', {
+  return jwt.sign({ id }, JWT_REFRESH_SECRET, {
     expiresIn: '30d'
   });
 };
 
-// Set HttpOnly Refresh Token Cookie
+// Set HttpOnly Refresh Token Cookie (Cross-Site Production Compatible)
 const setRefreshTokenCookie = (res, token) => {
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = process.env.NODE_ENV === 'production' || (process.env.CLIENT_URL && process.env.CLIENT_URL.includes('vercel.app'));
   res.cookie('refreshToken', token, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'lax',
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
   });
 };
@@ -35,16 +38,32 @@ const loginUser = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    // Find owner account
-    const owner = await User.findOne({ role: 'OWNER' }).select('+password');
-    const ownerEmail = process.env.OWNER_EMAIL || 'owner@genai.com';
+    const ownerEmail = (process.env.OWNER_EMAIL || 'owner@genai.com').toLowerCase().trim();
+    const ownerPassword = process.env.OWNER_PASSWORD || 'OwnerSecurePassword2026!';
 
+    // Find owner account flexible lookup
+    let owner = await User.findOne({
+      $or: [
+        { role: 'OWNER' },
+        { role: 'ADMIN' },
+        { email: email.toLowerCase().trim() },
+        { email: ownerEmail }
+      ]
+    }).select('+password');
+
+    // Auto-create/upsert owner if DB is fresh
     if (!owner) {
-      return res.status(401).json({ success: false, message: 'Owner account not initialized. Please run seed script.' });
+      owner = await User.create({
+        name: 'Roadmap Owner',
+        email: ownerEmail,
+        password: ownerPassword,
+        role: 'OWNER'
+      });
+      owner = await User.findById(owner._id).select('+password');
     }
 
     // Match email and password
-    const isEmailValid = email.toLowerCase().trim() === owner.email.toLowerCase().trim() || email.toLowerCase().trim() === ownerEmail.toLowerCase().trim();
+    const isEmailValid = email.toLowerCase().trim() === owner.email.toLowerCase().trim() || email.toLowerCase().trim() === ownerEmail;
     const isPasswordValid = await owner.matchPassword(password);
 
     if (!isEmailValid || !isPasswordValid) {
@@ -99,22 +118,37 @@ const refreshToken = async (req, res, next) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET || 'genai_roadmap_refresh_secret_2026_key');
+      decoded = jwt.verify(token, JWT_REFRESH_SECRET);
     } catch (err) {
-      res.clearCookie('refreshToken');
+      const isProduction = process.env.NODE_ENV === 'production' || (process.env.CLIENT_URL && process.env.CLIENT_URL.includes('vercel.app'));
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax'
+      });
       return res.status(401).json({ success: false, message: 'Refresh token expired or invalid' });
     }
 
     const owner = await User.findById(decoded.id).select('+refreshTokenHash');
     if (!owner || !owner.refreshTokenHash) {
-      res.clearCookie('refreshToken');
+      const isProduction = process.env.NODE_ENV === 'production' || (process.env.CLIENT_URL && process.env.CLIENT_URL.includes('vercel.app'));
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax'
+      });
       return res.status(401).json({ success: false, message: 'Session revoked or owner not found' });
     }
 
     // Verify refresh token against stored hash
     const isTokenMatched = await bcrypt.compare(token, owner.refreshTokenHash);
     if (!isTokenMatched) {
-      res.clearCookie('refreshToken');
+      const isProduction = process.env.NODE_ENV === 'production' || (process.env.CLIENT_URL && process.env.CLIENT_URL.includes('vercel.app'));
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax'
+      });
       return res.status(401).json({ success: false, message: 'Session revoked' });
     }
 
@@ -123,7 +157,7 @@ const refreshToken = async (req, res, next) => {
 
     res.json({
       success: true,
-      accessToken,
+      accessToken: newAccessToken,
       data: {
         _id: owner._id,
         name: owner.name,
@@ -152,10 +186,11 @@ const logoutUser = async (req, res, next) => {
       await User.findByIdAndUpdate(req.user._id, { $unset: { refreshTokenHash: 1 } });
     }
 
+    const isProduction = process.env.NODE_ENV === 'production' || (process.env.CLIENT_URL && process.env.CLIENT_URL.includes('vercel.app'));
     res.clearCookie('refreshToken', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax'
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax'
     });
 
     res.json({ success: true, message: 'You have been logged out.' });

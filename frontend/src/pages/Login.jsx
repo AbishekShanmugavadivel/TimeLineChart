@@ -50,6 +50,7 @@ const Login = () => {
           <input
             type="email"
             required
+            autoComplete="email"
             placeholder="owner@genai.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -63,6 +64,7 @@ const Login = () => {
             <input
               type={showPassword ? 'text' : 'password'}
               required
+              autoComplete="current-password"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

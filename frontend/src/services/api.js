@@ -7,7 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json'
   },
-  withCredentials: true // Required for HttpOnly refresh cookie transmission
+  withCredentials: true // Required for HttpOnly refresh cookie transmission across cross-origin deployments
 });
 
 // Interceptor to add Authorization Bearer token to request
@@ -22,7 +22,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Flag to prevent multiple simultaneous refresh calls
+// Lock flag to prevent concurrent refresh loops
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -43,8 +43,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // If 401 Unauthorized and not already retried
-    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+    // Check if error is 401 and request is NOT login/refresh auth endpoint itself
+    const requestUrl = originalRequest?.url || '';
+    const isAuthEndpoint = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/refresh');
+
+    if (error.response && error.response.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -70,15 +73,14 @@ api.interceptors.response.use(
           processQueue(null, newAccessToken);
           isRefreshing = false;
           return api(originalRequest);
+        } else {
+          throw new Error('Refresh response missing accessToken');
         }
       } catch (refreshErr) {
         processQueue(refreshErr, null);
         isRefreshing = false;
         localStorage.removeItem('genai_access_token');
         localStorage.removeItem('genai_user');
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
         return Promise.reject(refreshErr);
       }
     }
