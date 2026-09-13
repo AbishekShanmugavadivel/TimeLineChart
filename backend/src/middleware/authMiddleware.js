@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const JWT_ACCESS_SECRET = process.env.JWT_SECRET || 'genai_roadmap_access_secret_2026_key';
+const getAccessTokenSecret = () => process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || process.env.ACCESS_TOKEN_SECRET || 'genai_roadmap_access_secret_2026_key';
 
 const protect = async (req, res, next) => {
   let token;
@@ -9,7 +9,7 @@ const protect = async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, JWT_ACCESS_SECRET);
+      const decoded = jwt.verify(token, getAccessTokenSecret());
 
       req.user = await User.findById(decoded.id).select('-password');
       if (!req.user) {
